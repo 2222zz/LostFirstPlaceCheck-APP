@@ -88,9 +88,9 @@ public class MainActivity extends AppCompatActivity {
                 startActivity(t);
             }
         });
-        //SharedPreferences.Editor editor = appData.edit();
-        //editor.putString("lastCheckTime", "");
-        //editor.apply();
+//        SharedPreferences.Editor editor = appData.edit();
+//        editor.putString("lastCheckTime", "2022-05-16 09:35:11");
+//        editor.apply();
 
         PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
         boolean WhiteCheck = false;

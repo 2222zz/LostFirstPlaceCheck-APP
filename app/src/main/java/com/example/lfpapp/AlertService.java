@@ -40,6 +40,7 @@ public class AlertService extends Service {
     private String UID = "";
     private String API = "";
     private String lastCheckTime = "";
+    private Boolean loadDataSeq = true;
 
     NotificationManager manager;
     ServiceThread thread;
@@ -121,6 +122,23 @@ public class AlertService extends Service {
             Date date = new Date(now);
             SimpleDateFormat mFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
             String curTime = mFormat.format(date);
+            int request = appData.getInt("request", 0);
+            loadDataSeq = true;
+
+            NotificationManager notificationManager = (NotificationManager) getSystemService( Context.NOTIFICATION_SERVICE );
+            Intent intent = new Intent(getApplicationContext(), MainActivity.class);
+            intent.addFlags( Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP );
+            PendingIntent pendingIntent = PendingIntent.getActivity( AlertService.this, 0, intent, PendingIntent.FLAG_IMMUTABLE );
+            Uri soundUri = RingtoneManager.getDefaultUri( RingtoneManager.TYPE_NOTIFICATION );
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                @SuppressLint("WrongConstant")
+                NotificationChannel notificationChannel = new NotificationChannel( "my_notification", "n_channel", NotificationManager.IMPORTANCE_MAX );
+                notificationChannel.setDescription( "description" );
+                notificationChannel.setName( "ALERT Channel" );
+                assert notificationManager != null;
+                notificationManager.createNotificationChannel( notificationChannel );
+            }
 
             if(lastCheckTime.equals("")){
                 lastCheckTime = curTime;
@@ -128,22 +146,7 @@ public class AlertService extends Service {
                 editor.putString("lastCheckTime", lastCheckTime);
                 editor.apply();
 
-                NotificationManager notificationManager = (NotificationManager) getSystemService( Context.NOTIFICATION_SERVICE );
-                //Intent intent = new Intent( getApplicationContext(), MainActivity.class );
-                Intent intent = new Intent(getApplicationContext(), MainActivity.class);
-                intent.addFlags( Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP );
-                PendingIntent pendingIntent = PendingIntent.getActivity( AlertService.this, 0, intent, PendingIntent.FLAG_IMMUTABLE );
-                Uri soundUri = RingtoneManager.getDefaultUri( RingtoneManager.TYPE_NOTIFICATION );
-
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    @SuppressLint("WrongConstant")
-                    NotificationChannel notificationChannel = new NotificationChannel( "my_notification", "n_channel", NotificationManager.IMPORTANCE_MAX );
-                    notificationChannel.setDescription( "description" );
-                    notificationChannel.setName( "ALERT Channel" );
-                    assert notificationManager != null;
-                    notificationManager.createNotificationChannel( notificationChannel );
-                }
-                NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder( AlertService.this )
+                NotificationCompat.Builder firstBuilder = new NotificationCompat.Builder( AlertService.this )
                         .setSmallIcon( R.mipmap.ic_icon_gray )
                         .setContentTitle( "Start Detection" )
                         //.setContentText( "abcd" )
@@ -158,7 +161,7 @@ public class AlertService extends Service {
                 //.setProgress(100,50,false);
                 assert notificationManager != null;
                 int m = (int) ((new Date().getTime() / 1000L) % Integer.MAX_VALUE);
-                notificationManager.notify( m, notificationBuilder.build() );
+                notificationManager.notify( m, firstBuilder.build() );
                 Log.e("Service", "first execute");
             }
 
@@ -172,136 +175,97 @@ public class AlertService extends Service {
             } catch (ExecutionException e){
                 e.printStackTrace();
             }
-            data = findItem(jsonResult);
+            Log.e("Service", "UserData : " + jsonResult);
+            if(jsonResult == null){
+                Log.e("Service", "No Data");
+            }
+            else {
+                data = findItem(jsonResult);
+                Log.e("Service", "DataSize : " + data.size());
 
-            Log.e("Service", "DataSize : " + data.size());
+                for(int i = 0; i < data.size(); i++){
+                    String scoreJsonData;
+                    String itemTime = data.get(i).getDate();
 
-            // get beatmap info
-            for(int i = 0; i < data.size(); i++){
-                String scoreJsonData;
-                String itemTime = data.get(i).getDate();
+                    try {
+                        Log.e("Service", "CurrentTime : " + curTime);
+                        Log.e("Service", "lastCheckTime : " + lastCheckTime);
+                        Log.e("Service", "itemTime : " + itemTime);
 
-                try {
-                    Log.e("Service", "CurrentTime : " + curTime);
-                    Log.e("Service", "lastCheckTime : " + lastCheckTime);
-                    Log.e("Service", "itemTime : " + itemTime);
+                        itemTime = convertLocalTime(itemTime);
+                        Date checkTimeDate = mFormat.parse(lastCheckTime);
+                        Date itemTimeDate = mFormat.parse(itemTime);
+                        Log.e("Service", "change itemTime : " + itemTime);
 
-                    itemTime = convertLocalTime(itemTime);
-                    Date checkTimeDate = mFormat.parse(lastCheckTime);
-                    Date itemTimeDate = mFormat.parse(itemTime);
-                    Log.e("Service", "change itemTime : " + itemTime);
-
-                    long diff = checkTimeDate.getTime() - itemTimeDate.getTime();
-                    Log.e("Service", "time : " + diff);
-                    if(diff >= 0)
-                        continue;
-                } catch (ParseException e){
-                    e.printStackTrace();
-                }
-
-                //Log.e("tag", curTime);
-                //Log.e("tag", itemTime);
-                //Log.e("tag", data.get(i).getTitle());
-
-                try{
-                    Log.e("AsyncTask", "Start getScoreData");
-                    getScoreData = new loadJson(data.get(i).getBeatmapID(), API, 2, data.get(i).getMode());
-                    getThumbnail = new loadThumb(data.get(i).getBeatmapSetID());
-                    scoreJsonData = getScoreData.execute().get();
-                    Bitmap bitmap = getThumbnail.execute().get();
-                    bData = getData(scoreJsonData);
-                    String detailsScore = "(" + bData.getX320() + " / " + bData.getX300() + " / " + bData.getX200() + " / " + (bData.getX100() + bData.getX50() + bData.getX0()) + ")";
-
-                    NotificationManager notificationManager = (NotificationManager) getSystemService( Context.NOTIFICATION_SERVICE );
-                    //Intent intent = new Intent( getApplicationContext(), MainActivity.class );
-                    Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://osu.ppy.sh/beatmapsets/" + data.get(i).getBeatmapSetID() + "#" + intToStringMode(data.get(i).getMode()) + "/" + data.get(i).getBeatmapID()));
-                    intent.addFlags( Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP );
-                    PendingIntent pendingIntent = PendingIntent.getActivity( AlertService.this, 0, intent, PendingIntent.FLAG_IMMUTABLE );
-                    Uri soundUri = RingtoneManager.getDefaultUri( RingtoneManager.TYPE_NOTIFICATION );
-
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        @SuppressLint("WrongConstant")
-                        NotificationChannel notificationChannel = new NotificationChannel( "my_notification", "n_channel", NotificationManager.IMPORTANCE_MAX );
-                        notificationChannel.setDescription( "description" );
-                        notificationChannel.setName( "ALERT Channel" );
-                        assert notificationManager != null;
-                        notificationManager.createNotificationChannel( notificationChannel );
+                        long diff = checkTimeDate.getTime() - itemTimeDate.getTime();
+                        Log.e("Service", "time : " + diff);
+                        if(diff >= 0)
+                            continue;
+                    } catch (ParseException e){
+                        e.printStackTrace();
                     }
-                    NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder( AlertService.this )
-                            .setSmallIcon( R.drawable.app_gray )
-                            .setLargeIcon( bitmap )
-                            .setContentTitle( data.get(i).getTitle() )
-                            //.setContentText( "abcd" )
-                            .setContentText( bData.getPlayer() + " " + detailsScore )
-                            .setAutoCancel( true )
-                            .setSound( soundUri )
-                            .setContentIntent( pendingIntent )
-                            .setDefaults( Notification.DEFAULT_ALL )
-                            .setOnlyAlertOnce( true )
-                            .setChannelId( "my_notification" )
-                            .setColor( Color.parseColor( "#ffffff" ) );
-                    //.setProgress(100,50,false);
-                    assert notificationManager != null;
-                    int m = (int) ((new Date().getTime() / 1000L) % Integer.MAX_VALUE);
-                    notificationManager.notify( m, notificationBuilder.build() );
 
-                } catch(InterruptedException e){
-                    e.printStackTrace();
-                } catch (ExecutionException e){
-                    e.printStackTrace();
+                    //Log.e("tag", curTime);
+                    //Log.e("tag", itemTime);
+                    //Log.e("tag", data.get(i).getTitle());
+
+                    try{
+                        Log.e("AsyncTask", "Start getScoreData");
+                        getScoreData = new loadJson(data.get(i).getBeatmapID(), API, 2, data.get(i).getMode());
+                        getThumbnail = new loadThumb(data.get(i).getBeatmapSetID());
+                        scoreJsonData = getScoreData.execute().get();
+                        Bitmap bitmap = getThumbnail.execute().get();
+                        if(scoreJsonData != null && bitmap != null) {
+                            bData = getData(scoreJsonData);
+                            String detailsScore = "(" + bData.getX320() + " / " + bData.getX300() + " / " + bData.getX200() + " / " + (bData.getX100() + bData.getX50() + bData.getX0()) + ")";
+
+                            NotificationCompat.Builder alertBuilder = new NotificationCompat.Builder(AlertService.this)
+                                    .setSmallIcon( R.mipmap.ic_icon_gray )
+                                    .setLargeIcon(bitmap)
+                                    .setContentTitle(data.get(i).getTitle())
+                                    //.setContentText( "abcd" )
+                                    .setContentText(bData.getPlayer() + " " + detailsScore)
+                                    .setAutoCancel(true)
+                                    .setSound(soundUri)
+                                    .setContentIntent(pendingIntent)
+                                    .setDefaults(Notification.DEFAULT_ALL)
+                                    .setOnlyAlertOnce(true)
+                                    .setChannelId("my_notification")
+                                    .setColor(Color.parseColor("#ffffff"));
+                            //.setProgress(100,50,false);
+                            assert notificationManager != null;
+                            int m = (int) ((new Date().getTime() / 1000L) % Integer.MAX_VALUE);
+                            notificationManager.notify(m, alertBuilder.build());
+                        }
+                        else {
+                            loadDataSeq = false;
+                        }
+
+                    } catch(InterruptedException e){
+                        e.printStackTrace();
+                    } catch (ExecutionException e){
+                        e.printStackTrace();
+                    }
                 }
-            }
-
-            if(data.size() > 0){
-                if(data.get(0).getDate() != lastCheckTime) {
-                    lastCheckTime = convertLocalTime(data.get(0).getDate());
-                    Log.e("Service", "update lastCheckTime : " + lastCheckTime);
-                    SharedPreferences.Editor editor = appData.edit();
-                    editor.putString("lastCheckTime", lastCheckTime);
-                    editor.apply();
+                if(data.size() > 0 && loadDataSeq == true){
+                    if(data.get(0).getDate() != lastCheckTime) {
+                        lastCheckTime = convertLocalTime(data.get(0).getDate());
+                        Log.e("Service", "update lastCheckTime : " + lastCheckTime);
+                        SharedPreferences.Editor editor = appData.edit();
+                        editor.putString("lastCheckTime", lastCheckTime);
+                        editor.apply();
+                    }
                 }
+
+                SharedPreferences.Editor editor = appData.edit();
+                request += 1;
+                editor.putInt("request", request);
+                editor.apply();
+
+                Log.e("Service", "Total Request : " + request);
+                Log.e("Service", "Last Check Time : " + lastCheckTime);
+                Log.e("Service", "Message Complete");
             }
-            SharedPreferences.Editor editor = appData.edit();
-            int request = appData.getInt("request", 0) + 1;
-            editor.putInt("request", request);
-            editor.apply();
-
-            Log.e("Service", "Total Request : " + request);
-            Log.e("Service", "Last Check Time : " + lastCheckTime);
-            Log.e("Service", "Message Complete");
-            //Toast.makeText(getApplicationContext(), "Servie Complete : " + request, Toast.LENGTH_LONG).show();
-
-            /*NotificationManager notificationManager = (NotificationManager) getSystemService( Context.NOTIFICATION_SERVICE );
-            //Intent intent = new Intent( getApplicationContext(), MainActivity.class );
-            Intent intent = new Intent(getApplicationContext(), MainActivity.class);
-            intent.addFlags( Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP );
-            PendingIntent pendingIntent = PendingIntent.getActivity( AlertService.this, 0, intent, PendingIntent.FLAG_IMMUTABLE );
-            Uri soundUri = RingtoneManager.getDefaultUri( RingtoneManager.TYPE_NOTIFICATION );
-
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                @SuppressLint("WrongConstant")
-                NotificationChannel notificationChannel = new NotificationChannel( "my_notification", "n_channel", NotificationManager.IMPORTANCE_MAX );
-                notificationChannel.setDescription( "description" );
-                notificationChannel.setName( "ALERT Channel" );
-                assert notificationManager != null;
-                notificationManager.createNotificationChannel( notificationChannel );
-            }
-            NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder( AlertService.this )
-                    .setSmallIcon( R.mipmap.ic_icon_gray )
-                    .setContentTitle( "Request" )
-                    //.setContentText( "abcd" )
-                    .setContentText( request + " complete" )
-                    .setAutoCancel( true )
-                    .setSound( soundUri )
-                    .setContentIntent( pendingIntent )
-                    .setDefaults( Notification.DEFAULT_ALL )
-                    .setOnlyAlertOnce( true )
-                    .setChannelId( "my_notification" )
-                    .setColor( Color.parseColor( "#ffffff" ) );
-            //.setProgress(100,50,false);
-            assert notificationManager != null;
-            int m = (int) ((new Date().getTime() / 1000L) % Integer.MAX_VALUE);
-            notificationManager.notify( m, notificationBuilder.build() );*/
         }
     }
 
