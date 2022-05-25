@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">LFPApp</string>
+    <string name="get_key">Get API Key</string>
+    <string name="settings">Setting</string>
+    <string name="noti_channel_id">a</string>
+    <string name="logs">Check</string>
+</resources>
