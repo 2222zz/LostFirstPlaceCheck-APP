@@ -219,6 +219,9 @@ public class AlertService extends Service {
                             bData = getData(scoreJsonData);
                             String detailsScore = "(" + bData.getX320() + " / " + bData.getX300() + " / " + bData.getX200() + " / " + (bData.getX100() + bData.getX50() + bData.getX0()) + ")";
 
+                            intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://osu.ppy.sh/beatmapsets/" + data.get(i).getBeatmapSetID() + "#" + intToStringMode(data.get(i).getMode()) + "/" + data.get(i).getBeatmapID()));
+                            intent.addFlags( Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP );
+                            pendingIntent = PendingIntent.getActivity( AlertService.this, 0, intent, PendingIntent.FLAG_IMMUTABLE );
                             NotificationCompat.Builder alertBuilder = new NotificationCompat.Builder(AlertService.this)
                                     .setSmallIcon( R.mipmap.ic_icon_gray )
                                     .setLargeIcon(bitmap)
